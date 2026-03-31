@@ -16,9 +16,8 @@ export class InputHandler {
     this.pause = false;
 
     // Touch state
-    this._touches = {};
     this._touchJoystick = null;   // { id, startX, startY, curX, curY }
-    this._touchShoot = false;
+    this._shootTouchIds = new Set();
     this._touchPause = false;
 
     this._bindKeyboard();
@@ -26,6 +25,14 @@ export class InputHandler {
 
     this._joystickEl = null;
     this._shootBtnEl = null;
+
+    // Handler references for cleanup
+    this._handlers = {
+      touchstart: null,
+      touchmove: null,
+      touchend: null
+    };
+
     if (isTouchDevice()) this._buildTouchHUD();
   }
 
@@ -127,19 +134,42 @@ export class InputHandler {
       return { dx, dy, nx: dx / radius, ny: dy / radius };
     };
 
-    canvas.addEventListener('touchstart', (e) => {
+    this._handlers.touchstart = (e) => {
+      // Handle the pause button specifically
+      if (e.target.id === 'touch-pause') {
+        this.pause = true;
+        // The engine clears this.pause after processing, but let's be safe.
+        // On keyboard, it stays true while key is down. On touch, we toggle once.
+        setTimeout(() => { this.pause = false; }, 50);
+        return;
+      }
+
       e.preventDefault();
       for (const t of e.changedTouches) {
         // Left half = joystick, right half = shoot
         if (t.clientX < window.innerWidth / 2) {
-          this._touchJoystick = { id: t.identifier, startX: t.clientX, startY: t.clientY, curX: t.clientX, curY: t.clientY };
+          this._touchJoystick = { 
+            id: t.identifier, 
+            startX: t.clientX, 
+            startY: t.clientY, 
+            curX: t.clientX, 
+            curY: t.clientY 
+          };
+          // Move the joystick visual to the touch location (optional, but premium feel)
+          if (this._joystickEl) {
+            this._joystickEl.style.left = `${t.clientX - 50}px`;
+            this._joystickEl.style.top = `${t.clientY - 50}px`;
+            this._joystickEl.style.bottom = 'auto'; // override fixed bottom
+            this._joystickEl.style.opacity = '1';
+          }
         } else {
-          this._touchShoot = true;
+          this._shootTouchIds.add(t.identifier);
         }
       }
-    }, { passive: false });
+    };
+    window.addEventListener('touchstart', this._handlers.touchstart, { passive: false });
 
-    canvas.addEventListener('touchmove', (e) => {
+    this._handlers.touchmove = (e) => {
       e.preventDefault();
       for (const t of e.changedTouches) {
         if (this._touchJoystick && t.identifier === this._touchJoystick.id) {
@@ -158,9 +188,13 @@ export class InputHandler {
           }
         }
       }
-    }, { passive: false });
+    };
+    window.addEventListener('touchmove', this._handlers.touchmove, { passive: false });
 
-    canvas.addEventListener('touchend', (e) => {
+    this._handlers.touchend = (e) => {
+      // Don't prevent default on the pause button
+      if (e.target.id === 'touch-pause') return;
+
       e.preventDefault();
       for (const t of e.changedTouches) {
         if (this._touchJoystick && t.identifier === this._touchJoystick.id) {
@@ -168,22 +202,18 @@ export class InputHandler {
           this.axis.x = 0;
           this.axis.y = 0;
           if (this._joystickEl) {
+            this._joystickEl.style.opacity = '0.4';
             const thumb = this._joystickEl.querySelector('#touch-thumb');
             if (thumb) thumb.style.transform = 'translate(-50%, -50%)';
           }
         } else {
-          this._touchShoot = false;
+          this._shootTouchIds.delete(t.identifier);
         }
       }
-    }, { passive: false });
+    };
+    window.addEventListener('touchend', this._handlers.touchend, { passive: false });
 
-    // Pause button
-    document.addEventListener('touchstart', (e) => {
-      if (e.target.id === 'touch-pause') {
-        this.pause = true;
-        setTimeout(() => { this.pause = false; }, 100);
-      }
-    });
+    // Pause button handled via e.target.id in touchstart
   }
 
   // ── Update (called once per frame) ───────────────────────
@@ -207,7 +237,7 @@ export class InputHandler {
       this.axis.y = kx === 0 && ky === 0 ? 0 : ky / klen;
     }
 
-    this.shooting = this._keys.has('Space') || this._keys.has('KeyZ') || this._touchShoot;
+    this.shooting = this._keys.has('Space') || this._keys.has('KeyZ') || this._shootTouchIds.size > 0;
 
     // Copy prev
     this._prevKeys = new Set(this._keys);
@@ -221,6 +251,11 @@ export class InputHandler {
   }
 
   destroy() {
+    // Cleanup touch listeners
+    if (this._handlers.touchstart) window.removeEventListener('touchstart', this._handlers.touchstart);
+    if (this._handlers.touchmove) window.removeEventListener('touchmove', this._handlers.touchmove);
+    if (this._handlers.touchend) window.removeEventListener('touchend', this._handlers.touchend);
+
     // Cleanup touch elements
     document.getElementById('touch-joystick')?.remove();
     document.getElementById('touch-shoot')?.remove();
