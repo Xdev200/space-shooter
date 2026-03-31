@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#01010f" />
+  <meta name="description" content="Void Rift — A retro-futuristic arcade space shooter" />
+  <title>VOID RIFT</title>
+
+  <!-- PWA manifest inline -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Google Font: Share Tech Mono for that terminal aesthetic -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & base ───────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --c-bg:      #01010f;
+      --c-accent:  #00e5ff;
+      --c-red:     #ff1744;
+      --c-purple:  #7c4dff;
+      --c-text:    #e0e0ff;
+      --font-mono: 'Share Tech Mono', 'Courier New', monospace;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--c-bg);
+      overflow: hidden;
+      font-family: var(--font-mono);
+      color: var(--c-text);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── Layout shell ───────────────────────────────────── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    /* ── Canvas wrapper ─────────────────────────────────── */
+    #canvas-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    canvas#game {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      cursor: crosshair;
+      /* Size set dynamically by GameEngine._bindResize() */
+    }
+
+    /* ── Loading screen ─────────────────────────────────── */
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: var(--c-bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      z-index: 999;
+      transition: opacity 0.5s ease;
+    }
+
+    #loading.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #loading-title {
+      font-size: clamp(36px, 8vw, 64px);
+      letter-spacing: 0.18em;
+      color: var(--c-accent);
+      text-shadow:
+        0 0 20px var(--c-accent),
+        0 0 60px rgba(0,229,255,0.3);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    #loading-sub {
+      font-size: 13px;
+      letter-spacing: 0.25em;
+      color: rgba(200, 210, 255, 0.5);
+    }
+
+    #loading-bar-wrap {
+      width: min(300px, 70vw);
+      height: 3px;
+      background: rgba(0,229,255,0.12);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    #loading-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--c-accent);
+      box-shadow: 0 0 12px var(--c-accent);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    /* ── CRT scanline overlay ───────────────────────────── */
+    #crt {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 500;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 2px,
+        rgba(0, 0, 0, 0.06) 2px,
+        rgba(0, 0, 0, 0.06) 4px
+      );
+    }
+
+    /* ── Corner decoration ──────────────────────────────── */
+    .corner {
+      position: fixed;
+      width: 40px;
+      height: 40px;
+      opacity: 0.25;
+      pointer-events: none;
+      z-index: 600;
+    }
+    .corner::before,
+    .corner::after {
+      content: '';
+      position: absolute;
+      background: var(--c-accent);
+    }
+    .corner::before { width: 2px; height: 100%; }
+    .corner::after  { width: 100%; height: 2px; }
+
+    .corner.tl { top: 12px; left: 12px; }
+    .corner.tr { top: 12px; right: 12px; transform: scaleX(-1); }
+    .corner.bl { bottom: 12px; left: 12px; transform: scaleY(-1); }
+    .corner.br { bottom: 12px; right: 12px; transform: scale(-1); }
+
+    /* ── Version badge ──────────────────────────────────── */
+    #version {
+      position: fixed;
+      bottom: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      color: rgba(200,210,255,0.18);
+      pointer-events: none;
+      z-index: 600;
+    }
+
+    /* ── Animations ─────────────────────────────────────── */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.6; }
+    }
+
+    /* ── Mobile: hide corners on tiny screens ───────────── */
+    @media (max-width: 480px) {
+      .corner { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Loading screen -->
+  <div id="loading">
+    <div id="loading-title">VOID RIFT</div>
+    <div id="loading-sub">INITIALISING SYSTEMS</div>
+    <div id="loading-bar-wrap">
+      <div id="loading-bar"></div>
+    </div>
+  </div>
+
+  <!-- CRT scanlines -->
+  <div id="crt" aria-hidden="true"></div>
+
+  <!-- Corner chrome -->
+  <div class="corner tl" aria-hidden="true"></div>
+  <div class="corner tr" aria-hidden="true"></div>
+  <div class="corner bl" aria-hidden="true"></div>
+  <div class="corner br" aria-hidden="true"></div>
+
+  <!-- Main app wrapper -->
+  <div id="app">
+    <div id="canvas-wrap">
+      <canvas id="game" width="800" height="600"></canvas>
+    </div>
+  </div>
+
+  <div id="version">VOID RIFT v1.0.0 — OFFLINE READY</div>
+
+  <script type="module">
+    import { GameEngine } from './core/GameEngine.js';
+
+    // ── Loading animation ──────────────────────────────────
+    const bar = document.getElementById('loading-bar');
+    const loadingEl = document.getElementById('loading');
+
+    let progress = 0;
+    const tickLoader = setInterval(() => {
+      progress = Math.min(progress + Math.random() * 18, 88);
+      bar.style.width = progress + '%';
+    }, 120);
+
+    // ── Bootstrap ─────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', async () => {
+      const canvas = document.getElementById('game');
+      const engine = new GameEngine(canvas);
+
+      // Finish loader
+      clearInterval(tickLoader);
+      bar.style.width = '100%';
+
+      await new Promise(r => setTimeout(r, 400));
+      loadingEl.classList.add('fade-out');
+      setTimeout(() => loadingEl.remove(), 520);
+
+      // Start game
+      await engine.start();
+
+      // Register service worker for PWA / offline support
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').catch((err) => {
+          console.warn('[SW] Registration failed:', err);
+        });
+      }
+
+      // Expose for debugging
+      window.__game = engine;
+    });
+  </script>
+</body>
+</html>

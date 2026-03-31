@@ -1,0 +1,17 @@
+{
+  "name": "Void Rift",
+  "short_name": "VOIDRIFT",
+  "description": "A retro-futuristic arcade space shooter — play offline",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#01010f",
+  "theme_color": "#01010f",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' fill='%2301010f'/><polygon points='96,20 130,140 96,110 62,140' fill='%2300e5ff'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
