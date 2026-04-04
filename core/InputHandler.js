@@ -16,17 +16,35 @@ export class InputHandler {
     this.pause = false;
 
     // Touch state
-    this._touches = {};
     this._touchJoystick = null;   // { id, startX, startY, curX, curY }
-    this._touchShoot = false;
+    this._shootTouchIds = new Set();
     this._touchPause = false;
+
+    this._joystickEl = null;
+    this._shootBtnEl = null;
+
+    // Handler references for cleanup — must init BEFORE _bindTouch
+    this._handlers = {
+      touchstart: null,
+      touchmove: null,
+      touchend: null
+    };
 
     this._bindKeyboard();
     this._bindTouch();
 
-    this._joystickEl = null;
-    this._shootBtnEl = null;
-    if (isTouchDevice()) this._buildTouchHUD();
+    if (isTouchDevice()) {
+      this._buildTouchHUD();
+      this.setHUDVisibility(false); // hide until playing
+    }
+  }
+
+  setHUDVisibility(visible) {
+    const display = visible ? 'flex' : 'none';
+    if (this._joystickEl) this._joystickEl.style.display = display;
+    if (this._shootBtnEl) this._shootBtnEl.style.display = display;
+    const pause = document.getElementById('touch-pause');
+    if (pause) pause.style.display = display;
   }
 
   // ── Keyboard ─────────────────────────────────────────────
@@ -85,6 +103,7 @@ export class InputHandler {
         width: 100px; height: 100px; border-radius: 50%;
         background: rgba(0,229,255,0.12); border: 2px solid rgba(0,229,255,0.4);
         touch-action: none; user-select: none; z-index: 100;
+        display: none; /* Hidden by default */
       }
       #touch-thumb {
         position: absolute; top: 50%; left: 50%;
@@ -98,14 +117,14 @@ export class InputHandler {
         position: fixed; bottom: 90px; right: 60px;
         width: 80px; height: 80px; border-radius: 50%;
         background: rgba(255,23,68,0.25); border: 2px solid rgba(255,23,68,0.6);
-        display: flex; align-items: center; justify-content: center;
+        display: none; align-items: center; justify-content: center;
         font-size: 32px; touch-action: none; user-select: none; z-index: 100;
       }
       #touch-pause {
         position: fixed; top: 20px; right: 20px;
         width: 48px; height: 48px; border-radius: 8px;
         background: rgba(0,229,255,0.15); border: 1px solid rgba(0,229,255,0.4);
-        display: flex; align-items: center; justify-content: center;
+        display: none; align-items: center; justify-content: center;
         font-size: 22px; touch-action: none; user-select: none; z-index: 100;
         color: #00e5ff;
       }
@@ -127,20 +146,51 @@ export class InputHandler {
       return { dx, dy, nx: dx / radius, ny: dy / radius };
     };
 
-    canvas.addEventListener('touchstart', (e) => {
-      e.preventDefault();
+    this._handlers.touchstart = (e) => {
+      // Allow interaction with DOM inputs/buttons (like the name entry)
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('#name-input-overlay')) {
+        return;
+      }
+
+      // Handle the pause button specifically
+      if (e.target.id === 'touch-pause') {
+        this.pause = true;
+        // The engine clears this.pause after processing, but let's be safe.
+        // On keyboard, it stays true while key is down. On touch, we toggle once.
+        setTimeout(() => { this.pause = false; }, 50);
+        return;
+      }
+
+      if (e.cancelable) e.preventDefault();
       for (const t of e.changedTouches) {
         // Left half = joystick, right half = shoot
         if (t.clientX < window.innerWidth / 2) {
-          this._touchJoystick = { id: t.identifier, startX: t.clientX, startY: t.clientY, curX: t.clientX, curY: t.clientY };
+          this._touchJoystick = { 
+            id: t.identifier, 
+            startX: t.clientX, 
+            startY: t.clientY, 
+            curX: t.clientX, 
+            curY: t.clientY 
+          };
+          // Move the joystick visual to the touch location (optional, but premium feel)
+          if (this._joystickEl) {
+            this._joystickEl.style.left = `${t.clientX - 50}px`;
+            this._joystickEl.style.top = `${t.clientY - 50}px`;
+            this._joystickEl.style.bottom = 'auto'; // override fixed bottom
+            this._joystickEl.style.opacity = '1';
+          }
         } else {
-          this._touchShoot = true;
+          this._shootTouchIds.add(t.identifier);
         }
       }
-    }, { passive: false });
+    };
+    window.addEventListener('touchstart', this._handlers.touchstart, { passive: false });
 
-    canvas.addEventListener('touchmove', (e) => {
-      e.preventDefault();
+    this._handlers.touchmove = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('#name-input-overlay')) {
+        return;
+      }
+      if (e.cancelable) e.preventDefault();
       for (const t of e.changedTouches) {
         if (this._touchJoystick && t.identifier === this._touchJoystick.id) {
           this._touchJoystick.curX = t.clientX;
@@ -158,32 +208,38 @@ export class InputHandler {
           }
         }
       }
-    }, { passive: false });
+    };
+    window.addEventListener('touchmove', this._handlers.touchmove, { passive: false });
 
-    canvas.addEventListener('touchend', (e) => {
-      e.preventDefault();
+    this._handlers.touchend = (e) => {
+      // Allow interaction with DOM inputs/buttons
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('#name-input-overlay')) {
+        return;
+      }
+
+      // Don't prevent default on the pause button
+      if (e.target.id === 'touch-pause') return;
+
+      if (e.cancelable) e.preventDefault();
       for (const t of e.changedTouches) {
         if (this._touchJoystick && t.identifier === this._touchJoystick.id) {
           this._touchJoystick = null;
           this.axis.x = 0;
           this.axis.y = 0;
           if (this._joystickEl) {
+            this._joystickEl.style.opacity = '0.4';
             const thumb = this._joystickEl.querySelector('#touch-thumb');
             if (thumb) thumb.style.transform = 'translate(-50%, -50%)';
           }
         } else {
-          this._touchShoot = false;
+          this._shootTouchIds.delete(t.identifier);
         }
       }
-    }, { passive: false });
+    };
+    window.addEventListener('touchend', this._handlers.touchend, { passive: false });
+    window.addEventListener('touchcancel', this._handlers.touchend, { passive: false });
 
-    // Pause button
-    document.addEventListener('touchstart', (e) => {
-      if (e.target.id === 'touch-pause') {
-        this.pause = true;
-        setTimeout(() => { this.pause = false; }, 100);
-      }
-    });
+    // Pause button handled via e.target.id in touchstart
   }
 
   // ── Update (called once per frame) ───────────────────────
@@ -207,7 +263,7 @@ export class InputHandler {
       this.axis.y = kx === 0 && ky === 0 ? 0 : ky / klen;
     }
 
-    this.shooting = this._keys.has('Space') || this._keys.has('KeyZ') || this._touchShoot;
+    this.shooting = this._keys.has('Space') || this._keys.has('KeyZ') || this._shootTouchIds.size > 0;
 
     // Copy prev
     this._prevKeys = new Set(this._keys);
@@ -221,6 +277,11 @@ export class InputHandler {
   }
 
   destroy() {
+    // Cleanup touch listeners
+    if (this._handlers.touchstart) window.removeEventListener('touchstart', this._handlers.touchstart);
+    if (this._handlers.touchmove) window.removeEventListener('touchmove', this._handlers.touchmove);
+    if (this._handlers.touchend) window.removeEventListener('touchend', this._handlers.touchend);
+
     // Cleanup touch elements
     document.getElementById('touch-joystick')?.remove();
     document.getElementById('touch-shoot')?.remove();

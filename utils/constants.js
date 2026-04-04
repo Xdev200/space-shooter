@@ -88,6 +88,7 @@ export const COLORS = Object.freeze({
 export const STATES = Object.freeze({
   BOOT: 'BOOT',
   MENU: 'MENU',
+  NAME_INPUT: 'NAME_INPUT',
   PLAYING: 'PLAYING',
   PAUSED: 'PAUSED',
   GAME_OVER: 'GAME_OVER',
