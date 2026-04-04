@@ -198,6 +198,85 @@
       50%       { opacity: 0.6; }
     }
 
+    /* ── PWA Install Modal ──────────────────────────────── */
+    #pwa-install-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(1, 1, 15, 0.85);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #pwa-install-modal.show {
+      display: flex;
+      opacity: 1;
+    }
+
+    .install-dialog {
+      background: rgba(0, 229, 255, 0.05);
+      border: 1px solid var(--c-accent);
+      padding: 32px;
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.2), inset 0 0 15px rgba(0, 229, 255, 0.1);
+    }
+
+    .install-title {
+      font-size: 24px;
+      color: var(--c-accent);
+      margin-bottom: 12px;
+      letter-spacing: 0.1em;
+      text-shadow: 0 0 10px var(--c-accent);
+    }
+
+    .install-text {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--c-text);
+      margin-bottom: 24px;
+      opacity: 0.8;
+    }
+
+    .install-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+    }
+
+    .install-btn {
+      background: transparent;
+      border: 1px solid var(--c-text);
+      color: var(--c-text);
+      padding: 10px 20px;
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.2s ease;
+      letter-spacing: 0.1em;
+    }
+
+    .install-btn.primary {
+      border-color: var(--c-accent);
+      color: var(--c-accent);
+    }
+
+    .install-btn.primary:hover {
+      background: var(--c-accent);
+      color: var(--c-bg);
+      box-shadow: 0 0 15px var(--c-accent);
+    }
+
+    .install-btn.secondary:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
     /* ── Mobile: hide corners on tiny screens ───────────── */
     @media (max-width: 480px) {
       .corner { display: none; }
@@ -232,6 +311,18 @@
   </div>
 
   <div id="version">VOID RIFT v1.0.0 — OFFLINE READY</div>
+
+  <!-- PWA Install Modal -->
+  <div id="pwa-install-modal">
+    <div class="install-dialog">
+      <div class="install-title">INSTALL GAME</div>
+      <div class="install-text">Play VOID RIFT offline anytime. Add to your home screen!</div>
+      <div class="install-actions">
+        <button class="install-btn secondary" id="pwa-btn-later">Later</button>
+        <button class="install-btn primary" id="pwa-btn-install">Install</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module">
     import { GameEngine } from './core/GameEngine.js';
@@ -268,6 +359,52 @@
           console.warn('[SW] Registration failed:', err);
         });
       }
+
+      // ── PWA Installation Logic ─────────────────────────────
+      let deferredPrompt;
+      const installModal = document.getElementById('pwa-install-modal');
+      const btnInstall = document.getElementById('pwa-btn-install');
+      const btnLater = document.getElementById('pwa-btn-later');
+
+      window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent default browser prompt
+        e.preventDefault();
+        
+        // If already installed or user dismissed it previously, ignore
+        if (window.matchMedia('(display-mode: standalone)').matches || localStorage.getItem('pwaPromptDismissed')) {
+          return;
+        }
+
+        deferredPrompt = e;
+        
+        // Show after a slight delay so it doesn't overlap immediately with loader
+        setTimeout(() => {
+          installModal.classList.add('show');
+        }, 1500);
+      });
+
+      btnInstall.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        installModal.classList.remove('show');
+        
+        try {
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          if (outcome === 'accepted') {
+            console.log('[PWA] User accepted install');
+          } else {
+            localStorage.setItem('pwaPromptDismissed', 'true');
+          }
+        } catch (err) {
+          console.warn('[PWA] Error prompting install:', err);
+        }
+        deferredPrompt = null;
+      });
+
+      btnLater.addEventListener('click', () => {
+        installModal.classList.remove('show');
+        localStorage.setItem('pwaPromptDismissed', 'true');
+      });
 
       // Expose for debugging
       window.__game = engine;
