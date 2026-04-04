@@ -42,6 +42,8 @@ export class GameEngine {
     this._enemies   = new ObjectPool(() => new Enemy(),    ENEMY.POOL_SIZE);
     this._particles = new ObjectPool(() => new Particle(), PARTICLE.POOL_SIZE);
 
+    this._playerName = 'PILOT';
+
     // Player
     this._player = new Player();
 
@@ -83,19 +85,30 @@ export class GameEngine {
 
     switch (newState) {
       case STATES.MENU:
+        this._input.setHUDVisibility(false);
         this._screenCleanup = this._screens.showMenu(
-          () => this._setState(STATES.PLAYING),
+          () => this._setState(STATES.NAME_INPUT),
           () => this._setState(STATES.HIGH_SCORES),
         );
         break;
 
+      case STATES.NAME_INPUT:
+        this._input.setHUDVisibility(false);
+        this._screenCleanup = this._screens.showNameInput((name) => {
+          this._playerName = name;
+          this._setState(STATES.PLAYING);
+        });
+        break;
+
       case STATES.PLAYING:
+        this._input.setHUDVisibility(true);
         if (prev !== STATES.PAUSED) {
           this._startGame();
         }
         break;
 
       case STATES.PAUSED:
+        this._input.setHUDVisibility(true);
         this._screenCleanup = this._screens.showPause(
           () => this._setState(STATES.PLAYING),
           () => this._setState(STATES.MENU),
@@ -103,9 +116,10 @@ export class GameEngine {
         break;
 
       case STATES.GAME_OVER:
+        this._input.setHUDVisibility(false);
         this._audio.play('gameover');
         const isHigh = this._score.isHighScore(this._score.score);
-        this._score.saveScore('PILOT');
+        this._score.saveScore(this._playerName);
         this._screenCleanup = this._screens.showGameOver(
           this._score.score,
           this._spawn.wave,
@@ -116,6 +130,7 @@ export class GameEngine {
         break;
 
       case STATES.HIGH_SCORES:
+        this._input.setHUDVisibility(false);
         this._screenCleanup = this._screens.showHighScores(
           this._score.getHighScores(),
           () => this._setState(STATES.MENU),
@@ -263,6 +278,10 @@ export class GameEngine {
 
       case STATES.MENU:
         this._screens.drawMenu(ctx);
+        break;
+
+      case STATES.NAME_INPUT:
+        this._screens.drawNameInput(ctx);
         break;
 
       case STATES.GAME_OVER:

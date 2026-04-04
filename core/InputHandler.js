@@ -20,20 +20,31 @@ export class InputHandler {
     this._shootTouchIds = new Set();
     this._touchPause = false;
 
-    this._bindKeyboard();
-    this._bindTouch();
-
     this._joystickEl = null;
     this._shootBtnEl = null;
 
-    // Handler references for cleanup
+    // Handler references for cleanup — must init BEFORE _bindTouch
     this._handlers = {
       touchstart: null,
       touchmove: null,
       touchend: null
     };
 
-    if (isTouchDevice()) this._buildTouchHUD();
+    this._bindKeyboard();
+    this._bindTouch();
+
+    if (isTouchDevice()) {
+      this._buildTouchHUD();
+      this.setHUDVisibility(false); // hide until playing
+    }
+  }
+
+  setHUDVisibility(visible) {
+    const display = visible ? 'flex' : 'none';
+    if (this._joystickEl) this._joystickEl.style.display = display;
+    if (this._shootBtnEl) this._shootBtnEl.style.display = display;
+    const pause = document.getElementById('touch-pause');
+    if (pause) pause.style.display = display;
   }
 
   // ── Keyboard ─────────────────────────────────────────────
@@ -92,6 +103,7 @@ export class InputHandler {
         width: 100px; height: 100px; border-radius: 50%;
         background: rgba(0,229,255,0.12); border: 2px solid rgba(0,229,255,0.4);
         touch-action: none; user-select: none; z-index: 100;
+        display: none; /* Hidden by default */
       }
       #touch-thumb {
         position: absolute; top: 50%; left: 50%;
@@ -105,14 +117,14 @@ export class InputHandler {
         position: fixed; bottom: 90px; right: 60px;
         width: 80px; height: 80px; border-radius: 50%;
         background: rgba(255,23,68,0.25); border: 2px solid rgba(255,23,68,0.6);
-        display: flex; align-items: center; justify-content: center;
+        display: none; align-items: center; justify-content: center;
         font-size: 32px; touch-action: none; user-select: none; z-index: 100;
       }
       #touch-pause {
         position: fixed; top: 20px; right: 20px;
         width: 48px; height: 48px; border-radius: 8px;
         background: rgba(0,229,255,0.15); border: 1px solid rgba(0,229,255,0.4);
-        display: flex; align-items: center; justify-content: center;
+        display: none; align-items: center; justify-content: center;
         font-size: 22px; touch-action: none; user-select: none; z-index: 100;
         color: #00e5ff;
       }
@@ -135,6 +147,11 @@ export class InputHandler {
     };
 
     this._handlers.touchstart = (e) => {
+      // Allow interaction with DOM inputs/buttons (like the name entry)
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('#name-input-overlay')) {
+        return;
+      }
+
       // Handle the pause button specifically
       if (e.target.id === 'touch-pause') {
         this.pause = true;
@@ -144,7 +161,7 @@ export class InputHandler {
         return;
       }
 
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
       for (const t of e.changedTouches) {
         // Left half = joystick, right half = shoot
         if (t.clientX < window.innerWidth / 2) {
@@ -170,7 +187,10 @@ export class InputHandler {
     window.addEventListener('touchstart', this._handlers.touchstart, { passive: false });
 
     this._handlers.touchmove = (e) => {
-      e.preventDefault();
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('#name-input-overlay')) {
+        return;
+      }
+      if (e.cancelable) e.preventDefault();
       for (const t of e.changedTouches) {
         if (this._touchJoystick && t.identifier === this._touchJoystick.id) {
           this._touchJoystick.curX = t.clientX;
@@ -192,10 +212,15 @@ export class InputHandler {
     window.addEventListener('touchmove', this._handlers.touchmove, { passive: false });
 
     this._handlers.touchend = (e) => {
+      // Allow interaction with DOM inputs/buttons
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('#name-input-overlay')) {
+        return;
+      }
+
       // Don't prevent default on the pause button
       if (e.target.id === 'touch-pause') return;
 
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
       for (const t of e.changedTouches) {
         if (this._touchJoystick && t.identifier === this._touchJoystick.id) {
           this._touchJoystick = null;
@@ -212,6 +237,7 @@ export class InputHandler {
       }
     };
     window.addEventListener('touchend', this._handlers.touchend, { passive: false });
+    window.addEventListener('touchcancel', this._handlers.touchend, { passive: false });
 
     // Pause button handled via e.target.id in touchstart
   }

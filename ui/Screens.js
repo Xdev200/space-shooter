@@ -117,6 +117,104 @@ export class Screens {
     ctx.fillText('P / ESC — PAUSE', GAME.WIDTH / 2, GAME.HEIGHT - 12);
   }
 
+  // ── NAME INPUT ──────────────────────────────────────────
+
+  showNameInput(onConfirm) {
+    const overlay = document.createElement('div');
+    overlay.id = 'name-input-overlay';
+    overlay.innerHTML = `
+      <div class="name-input-box">
+        <h2>ENTER PILOT NAME</h2>
+        <input type="text" id="pilot-name" maxlength="12" placeholder="PILOT NAME" />
+        <button id="confirm-name">ENGAGE SYSTEMS</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const style = document.createElement('style');
+    style.id = 'name-input-style';
+    style.textContent = `
+      #name-input-overlay {
+        position: fixed; inset: 0;
+        background: rgba(1, 1, 15, 0.98);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 10000;
+        backdrop-filter: blur(15px);
+        font-family: "Share Tech Mono", monospace;
+      }
+      .name-input-box {
+        background: rgba(1, 1, 15, 0.95); border: 2px solid #00e5ff;
+        padding: 40px; border-radius: 0; text-align: center;
+        box-shadow: 0 0 40px rgba(0, 229, 255, 0.25);
+        animation: scanlineIn 0.3s ease-out;
+        position: relative; overflow: hidden;
+      }
+      .name-input-box::before {
+        content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+        background: rgba(0, 229, 255, 0.5); box-shadow: 0 0 15px #00e5ff;
+        animation: scanlineMove 4s linear infinite;
+      }
+      @keyframes scanlineMove { 0% { top: 0; } 100% { top: 100%; } }
+      @keyframes scanlineIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+      
+      .name-input-box h2 { color: #00e5ff; margin-bottom: 24px; letter-spacing: 4px; font-size: 22px; text-shadow: 0 0 10px #00e5ff; }
+      #pilot-name {
+        background: rgba(0, 21, 40, 0.8); border: 1px solid rgba(0, 229, 255, 0.4);
+        padding: 14px 20px; color: #fff; font-family: 'Share Tech Mono', monospace;
+        font-size: 24px; text-align: center; margin-bottom: 24px; outline: none; width: 280px;
+        transition: all 0.3s; text-transform: uppercase; border-radius: 0;
+      }
+      #pilot-name:focus { border-color: #00e5ff; box-shadow: 0 0 15px rgba(0, 229, 255, 0.4); background: rgba(0, 30, 50, 0.9); }
+      #confirm-name {
+        display: block; width: 100%; padding: 16px; background: rgba(0, 229, 255, 0.1);
+        border: 1px solid #00e5ff; color: #00e5ff; font-family: 'Share Tech Mono', monospace;
+        font-size: 18px; cursor: pointer; transition: all 0.2s; letter-spacing: 3px; border-radius: 0;
+      }
+      #confirm-name:hover { background: #00e5ff; color: #01010f; box-shadow: 0 0 25px #00e5ff; }
+    `;
+    document.head.appendChild(style);
+
+    const input = overlay.querySelector('#pilot-name');
+    const btn = overlay.querySelector('#confirm-name');
+    
+    // Auto-focus after a delay to ensure it works on all platforms
+    setTimeout(() => input.focus(), 100);
+
+    const submit = () => {
+      const name = input.value.trim().toUpperCase() || 'PILOT';
+      this._audio?.play('menu');
+      onConfirm(name);
+    };
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      submit();
+    });
+    input.addEventListener('keydown', (e) => { 
+      if (e.key === 'Enter') {
+        e.stopPropagation();
+        submit(); 
+      }
+    });
+
+    // Stop all touch/pointer events from bubbling to the canvas/window
+    overlay.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    overlay.addEventListener('touchend', (e) => e.stopPropagation(), { passive: true });
+    overlay.addEventListener('pointerup', (e) => e.stopPropagation(), { passive: true });
+
+    return () => {
+      overlay.remove();
+      const s = document.getElementById('name-input-style');
+      if (s) s.remove();
+    };
+  }
+
+  drawNameInput(ctx) {
+    this._drawSpaceBackground(ctx);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, GAME.WIDTH, GAME.HEIGHT);
+  }
+
   // ── PAUSE ────────────────────────────────────────────────
 
   showPause(onResume, onQuit) {
